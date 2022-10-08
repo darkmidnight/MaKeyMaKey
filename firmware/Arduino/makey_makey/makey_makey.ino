@@ -20,11 +20,12 @@
  */
 
 /////////////////////////
-// DEBUG DEFINITIONS ////               
+// DEBUG DEFINITIONS ////
 /////////////////////////
 //#define DEBUG
-//#define DEBUG2 
-//#define DEBUG3 
+//#define DEBUGDMS
+//#define DEBUG2
+//#define DEBUG3
 //#define DEBUG_TIMING
 //#define DEBUG_MOUSE
 //#define DEBUG_TIMING2
@@ -33,21 +34,21 @@
 // DEFINED CONSTANTS////
 ////////////////////////
 
-#define BUFFER_LENGTH    3     // 3 bytes gives us 24 samples
-#define NUM_INPUTS       18    // 6 on the front + 12 on the back
-//#define TARGET_LOOP_TIME 694   // (1/60 seconds) / 24 samples = 694 microseconds per sample 
-//#define TARGET_LOOP_TIME 758  // (1/55 seconds) / 24 samples = 758 microseconds per sample 
-#define TARGET_LOOP_TIME 744  // (1/56 seconds) / 24 samples = 744 microseconds per sample 
+#define BUFFER_LENGTH 3  // 3 bytes gives us 24 samples
+#define NUM_INPUTS 18    // 6 on the front + 12 on the back
+//#define TARGET_LOOP_TIME 694   // (1/60 seconds) / 24 samples = 694 microseconds per sample
+//#define TARGET_LOOP_TIME 758  // (1/55 seconds) / 24 samples = 758 microseconds per sample
+#define TARGET_LOOP_TIME 744  // (1/56 seconds) / 24 samples = 744 microseconds per sample
 
 // id numbers for mouse movement inputs (used in settings.h)
-#define MOUSE_MOVE_UP       -1 
-#define MOUSE_MOVE_DOWN     -2
-#define MOUSE_MOVE_LEFT     -3
-#define MOUSE_MOVE_RIGHT    -4
+#define MOUSE_MOVE_UP -1
+#define MOUSE_MOVE_DOWN -2
+#define MOUSE_MOVE_LEFT -3
+#define MOUSE_MOVE_RIGHT -4
 
 #if (ARDUINO > 10605)
-  #include <Keyboard.h>
-  #include <Mouse.h>
+#include <Keyboard.h>
+#include <Mouse.h>
 #endif
 #include "settings.h"
 
@@ -57,7 +58,7 @@
 typedef struct {
   byte pinNumber;
   int keyCode;
-  byte measurementBuffer[BUFFER_LENGTH]; 
+  byte measurementBuffer[BUFFER_LENGTH];
   boolean oldestMeasurement;
   byte bufferSum;
   boolean pressed;
@@ -65,8 +66,7 @@ typedef struct {
   boolean isMouseMotion;
   boolean isMouseButton;
   boolean isKey;
-} 
-MakeyMakeyInput;
+} MakeyMakeyInput;
 
 MakeyMakeyInput inputs[NUM_INPUTS];
 
@@ -76,20 +76,20 @@ MakeyMakeyInput inputs[NUM_INPUTS];
 int bufferIndex = 0;
 byte byteCounter = 0;
 byte bitCounter = 0;
-int mouseMovementCounter = 0; // for sending mouse movement events at a slower interval
+int mouseMovementCounter = 0;  // for sending mouse movement events at a slower interval
 
 int pressThreshold;
 int releaseThreshold;
 boolean inputChanged;
 
-int mouseHoldCount[NUM_INPUTS]; // used to store mouse movement hold data
+int mouseHoldCount[NUM_INPUTS];  // used to store mouse movement hold data
 
 // Pin Numbers
 // input pin numbers for kickstarter production board
 int pinNumbers[NUM_INPUTS] = {
-  12, 8, 13, 15, 7, 6,     // top of makey makey board
-  5, 4, 3, 2, 1, 0,        // left side of female header, KEYBOARD
-  23, 22, 21, 20, 19, 18   // right side of female header, MOUSE
+  12, 8, 13, 15, 7, 6,    // top of makey makey board
+  5, 4, 3, 2, 1, 0,       // left side of female header, KEYBOARD
+  23, 22, 21, 20, 19, 18  // right side of female header, MOUSE
 };
 
 // input status LED pin numbers
@@ -105,6 +105,9 @@ int loopTime = 0;
 int prevTime = 0;
 int loopCounter = 0;
 
+unsigned long inputTimers[NUM_INPUTS];
+int keyToggle[NUM_INPUTS];
+int releaseTimer = 500;
 
 ///////////////////////////
 // FUNCTIONS //////////////
@@ -125,8 +128,7 @@ void updateOutLEDs();
 //////////////////////
 // SETUP /////////////
 //////////////////////
-void setup() 
-{
+void setup() {
   initializeArduino();
   initializeInputs();
   danceLeds();
@@ -135,8 +137,7 @@ void setup()
 ////////////////////
 // MAIN LOOP ///////
 ////////////////////
-void loop() 
-{
+void loop() {
   updateMeasurementBuffers();
   updateBufferSums();
   updateBufferIndex();
@@ -158,8 +159,7 @@ void initializeArduino() {
 
   /* Set up input pins 
    DEactivate the internal pull-ups, since we're using external resistors */
-  for (int i=0; i<NUM_INPUTS; i++)
-  {
+  for (int i = 0; i < NUM_INPUTS; i++) {
     pinMode(pinNumbers[i], INPUT);
     digitalWrite(pinNumbers[i], LOW);
   }
@@ -178,7 +178,7 @@ void initializeArduino() {
 
 
 #ifdef DEBUG
-  delay(4000); // allow us time to reprogram in case things are freaking out
+  delay(4000);  // allow us time to reprogram in case things are freaking out
 #endif
 
   Keyboard.begin();
@@ -191,9 +191,9 @@ void initializeArduino() {
 void initializeInputs() {
 
   float thresholdPerc = SWITCH_THRESHOLD_OFFSET_PERC;
-  float thresholdCenterBias = SWITCH_THRESHOLD_CENTER_BIAS/50.0;
+  float thresholdCenterBias = SWITCH_THRESHOLD_CENTER_BIAS / 50.0;
   float pressThresholdAmount = (BUFFER_LENGTH * 8) * (thresholdPerc / 100.0);
-  float thresholdCenter = ( (BUFFER_LENGTH * 8) / 2.0 ) * (thresholdCenterBias);
+  float thresholdCenter = ((BUFFER_LENGTH * 8) / 2.0) * (thresholdCenterBias);
   pressThreshold = int(thresholdCenter + pressThresholdAmount);
   releaseThreshold = int(thresholdCenter - pressThresholdAmount);
 
@@ -202,11 +202,13 @@ void initializeInputs() {
   Serial.println(releaseThreshold);
 #endif
 
-  for (int i=0; i<NUM_INPUTS; i++) {
+  for (int i = 0; i < NUM_INPUTS; i++) {
+    inputTimers[i] = 0;
+    keyToggle[i] = 0;
     inputs[i].pinNumber = pinNumbers[i];
     inputs[i].keyCode = keyCodes[i];
 
-    for (int j=0; j<BUFFER_LENGTH; j++) {
+    for (int j = 0; j < BUFFER_LENGTH; j++) {
       inputs[i].measurementBuffer[j] = 0;
     }
     inputs[i].oldestMeasurement = 0;
@@ -221,21 +223,18 @@ void initializeInputs() {
 
     if (inputs[i].keyCode < 0) {
 #ifdef DEBUG_MOUSE
-      Serial.println("GOT IT");  
+      Serial.println("GOT IT");
 #endif
 
       inputs[i].isMouseMotion = true;
-    } 
-    else if ((inputs[i].keyCode == MOUSE_LEFT) || (inputs[i].keyCode == MOUSE_RIGHT)) {
+    } else if ((inputs[i].keyCode == MOUSE_LEFT) || (inputs[i].keyCode == MOUSE_RIGHT)) {
       inputs[i].isMouseButton = true;
-    } 
-    else {
+    } else {
       inputs[i].isKey = true;
     }
 #ifdef DEBUG
     Serial.println(i);
 #endif
-
   }
 }
 
@@ -245,26 +244,25 @@ void initializeInputs() {
 //////////////////////////////
 void updateMeasurementBuffers() {
 
-  for (int i=0; i<NUM_INPUTS; i++) {
+  for (int i = 0; i < NUM_INPUTS; i++) {
 
     // store the oldest measurement, which is the one at the current index,
-    // before we update it to the new one 
+    // before we update it to the new one
     // we use oldest measurement in updateBufferSums
     byte currentByte = inputs[i].measurementBuffer[byteCounter];
-    inputs[i].oldestMeasurement = (currentByte >> bitCounter) & 0x01; 
+    inputs[i].oldestMeasurement = (currentByte >> bitCounter) & 0x01;
 
     // make the new measurement
     boolean newMeasurement = digitalRead(inputs[i].pinNumber);
 
     // invert so that true means the switch is closed
-    newMeasurement = !newMeasurement; 
+    newMeasurement = !newMeasurement;
 
-    // store it    
+    // store it
     if (newMeasurement) {
-      currentByte |= (1<<bitCounter);
-    } 
-    else {
-      currentByte &= ~(1<<bitCounter);
+      currentByte |= (1 << bitCounter);
+    } else {
+      currentByte &= ~(1 << bitCounter);
     }
     inputs[i].measurementBuffer[byteCounter] = currentByte;
   }
@@ -278,16 +276,16 @@ void updateBufferSums() {
   // the bufferSum is a running tally of the entire measurementBuffer
   // add the new measurement and subtract the old one
 
-  for (int i=0; i<NUM_INPUTS; i++) {
+  for (int i = 0; i < NUM_INPUTS; i++) {
     byte currentByte = inputs[i].measurementBuffer[byteCounter];
-    boolean currentMeasurement = (currentByte >> bitCounter) & 0x01; 
+    boolean currentMeasurement = (currentByte >> bitCounter) & 0x01;
     if (currentMeasurement) {
       inputs[i].bufferSum++;
     }
     if (inputs[i].oldestMeasurement) {
       inputs[i].bufferSum--;
     }
-  }  
+  }
 }
 
 ///////////////////////////
@@ -309,29 +307,56 @@ void updateBufferIndex() {
 ///////////////////////////
 void updateInputStates() {
   inputChanged = false;
-  for (int i=0; i<NUM_INPUTS; i++) {
-    inputs[i].prevPressed = inputs[i].pressed; // store previous pressed state (only used for mouse buttons)
+  for (int i = 0; i < NUM_INPUTS; i++) {
+    inputs[i].prevPressed = inputs[i].pressed;  // store previous pressed state (only used for mouse buttons)
     if (inputs[i].pressed) {
-      if (inputs[i].bufferSum < releaseThreshold) {  
+      if (inputs[i].bufferSum < releaseThreshold) {
         inputChanged = true;
         inputs[i].pressed = false;
-        if (inputs[i].isKey) {
+        if (i != 3 && inputs[i].isKey) { // 3 is RIGHT
           Keyboard.release(inputs[i].keyCode);
         }
-        if (inputs[i].isMouseMotion) {  
+        if (inputs[i].isMouseMotion) {
           mouseHoldCount[i] = 0;  // input becomes released, reset mouse hold
         }
+      } else if (inputs[i].isMouseMotion) {
+        mouseHoldCount[i]++;  // input remains pressed, increment mouse hold
       }
-      else if (inputs[i].isMouseMotion) {  
-        mouseHoldCount[i]++; // input remains pressed, increment mouse hold
-      }
-    } 
-    else if (!inputs[i].pressed) {
+    } else if (!inputs[i].pressed) {
       if (inputs[i].bufferSum > pressThreshold) {  // input becomes pressed
         inputChanged = true;
-        inputs[i].pressed = true; 
+        inputs[i].pressed = true;
         if (inputs[i].isKey) {
-          Keyboard.press(inputs[i].keyCode);
+          if (i==3) { // 3 is RIGHT
+          inputTimers[i] = millis();
+          } else {
+            Keyboard.press(inputs[i].keyCode);
+          }
+        }
+      }
+    }
+
+    if (inputTimers[i] > 0) {               // If no timer has been set
+      if (keyToggle[i] == 0) {              // The key is not down
+        Keyboard.press(inputs[i].keyCode);  // So press it
+        keyToggle[i] = 1;
+#ifdef DEBUGDMS
+        Serial.print("Pressed ");
+        Serial.println(i);
+#endif
+      } else {  // The key is already down.
+#ifdef DEBUGDMS
+        Serial.println(inputTimers[i]);
+        Serial.println(millis());
+        Serial.println(millis() - inputTimers[i] >= releaseTimer);
+#endif
+        if (millis() - inputTimers[i] >= releaseTimer) {  // The timer has elapsed
+          Keyboard.release(inputs[i].keyCode);
+          keyToggle[i] = 0;
+          inputTimers[i] = 0;  // Reset the timer
+#ifdef DEBUGDMS
+          Serial.println("Released");
+#endif
         }
       }
     }
@@ -384,27 +409,26 @@ void updateInputStates() {
  */
 
 /////////////////////////////
-// SEND MOUSE BUTTON EVENTS 
+// SEND MOUSE BUTTON EVENTS
 /////////////////////////////
 void sendMouseButtonEvents() {
   if (inputChanged) {
-    for (int i=0; i<NUM_INPUTS; i++) {
+    for (int i = 0; i < NUM_INPUTS; i++) {
       if (inputs[i].isMouseButton) {
         if (inputs[i].pressed) {
           if (inputs[i].keyCode == MOUSE_LEFT) {
             Mouse.press(MOUSE_LEFT);
-          } 
+          }
           if (inputs[i].keyCode == MOUSE_RIGHT) {
             Mouse.press(MOUSE_RIGHT);
-          } 
-        } 
-        else if (inputs[i].prevPressed) {
+          }
+        } else if (inputs[i].prevPressed) {
           if (inputs[i].keyCode == MOUSE_LEFT) {
             Mouse.release(MOUSE_LEFT);
-          } 
+          }
           if (inputs[i].keyCode == MOUSE_RIGHT) {
             Mouse.release(MOUSE_RIGHT);
-          }           
+          }
         }
       }
     }
@@ -425,71 +449,56 @@ void sendMouseMovementEvents() {
   mouseMovementCounter++;
   mouseMovementCounter %= MOUSE_MOTION_UPDATE_INTERVAL;
   if (mouseMovementCounter == 0) {
-    for (int i=0; i<NUM_INPUTS; i++) {
+    for (int i = 0; i < NUM_INPUTS; i++) {
 #ifdef DEBUG_MOUSE
-      //  Serial.println(inputs[i].isMouseMotion);  
+      //  Serial.println(inputs[i].isMouseMotion);
 #endif
 
       if (inputs[i].isMouseMotion) {
         if (inputs[i].pressed) {
           if (inputs[i].keyCode == MOUSE_MOVE_UP) {
             // JL Changes (x4): now update to 1 + a hold factor, constrained between 1 and mouse max movement speed
-            up=constrain(1+mouseHoldCount[i]/MOUSE_RAMP_SCALE, 1, MOUSE_MAX_PIXELS);
-          }  
+            up = constrain(1 + mouseHoldCount[i] / MOUSE_RAMP_SCALE, 1, MOUSE_MAX_PIXELS);
+          }
           if (inputs[i].keyCode == MOUSE_MOVE_DOWN) {
-            down=constrain(1+mouseHoldCount[i]/MOUSE_RAMP_SCALE, 1, MOUSE_MAX_PIXELS);
-          }  
+            down = constrain(1 + mouseHoldCount[i] / MOUSE_RAMP_SCALE, 1, MOUSE_MAX_PIXELS);
+          }
           if (inputs[i].keyCode == MOUSE_MOVE_LEFT) {
-            left=constrain(1+mouseHoldCount[i]/MOUSE_RAMP_SCALE, 1, MOUSE_MAX_PIXELS);
-          }  
+            left = constrain(1 + mouseHoldCount[i] / MOUSE_RAMP_SCALE, 1, MOUSE_MAX_PIXELS);
+          }
           if (inputs[i].keyCode == MOUSE_MOVE_RIGHT) {
-            right=constrain(1+mouseHoldCount[i]/MOUSE_RAMP_SCALE, 1, MOUSE_MAX_PIXELS);
-          }  
+            right = constrain(1 + mouseHoldCount[i] / MOUSE_RAMP_SCALE, 1, MOUSE_MAX_PIXELS);
+          }
         }
       }
     }
 
     // diagonal scrolling and left/right cancellation
-    if(left > 0)
-    {
-      if(right > 0)
-      {
-        horizmotion = 0; // cancel horizontal motion because left and right are both pushed
+    if (left > 0) {
+      if (right > 0) {
+        horizmotion = 0;  // cancel horizontal motion because left and right are both pushed
+      } else {
+        horizmotion = -left;  // left yes, right no
       }
-      else
-      {
-        horizmotion = -left; // left yes, right no
-      }
-    }
-    else
-    {
-      if(right > 0)
-      {
-        horizmotion = right; // right yes, left no
+    } else {
+      if (right > 0) {
+        horizmotion = right;  // right yes, left no
       }
     }
 
-    if(down > 0)
-    {
-      if(up > 0)
-      {
-        vertmotion = 0; // cancel vertical motion because up and down are both pushed
+    if (down > 0) {
+      if (up > 0) {
+        vertmotion = 0;  // cancel vertical motion because up and down are both pushed
+      } else {
+        vertmotion = down;  // down yes, up no
       }
-      else
-      {
-        vertmotion = down; // down yes, up no
-      }
-    }
-    else
-    {
-      if (up > 0)
-      {
-        vertmotion = -up; // up yes, down no
+    } else {
+      if (up > 0) {
+        vertmotion = -up;  // up yes, down no
       }
     }
     // now move the mouse
-    if( !((horizmotion == 0) && (vertmotion==0)) )
-    {
+    if (!((horizmotion == 0) && (vertmotion == 0))) {
       Mouse.move(horizmotion * PIXELS_PER_MOUSE_STEP, vertmotion * PIXELS_PER_MOUSE_STEP);
     }
   }
@@ -510,13 +519,12 @@ void addDelay() {
 
 #ifdef DEBUG_TIMING
   if (loopCounter == 0) {
-    int t = micros()-prevTime;
+    int t = micros() - prevTime;
     Serial.println(t);
   }
   loopCounter++;
   loopCounter %= 999;
 #endif
-
 }
 
 ///////////////////////////
@@ -548,7 +556,6 @@ void cycleLEDs() {
     digitalWrite(inputLED_b, LOW);
     pinMode(inputLED_c, INPUT);
     digitalWrite(inputLED_c, LOW);
-
   }
   if ((ledCycleCounter == 2) && inputs[2].pressed) {
     pinMode(inputLED_a, OUTPUT);
@@ -582,20 +589,17 @@ void cycleLEDs() {
     pinMode(inputLED_c, OUTPUT);
     digitalWrite(inputLED_c, LOW);
   }
-
 }
 
 ///////////////////////////
 // DANCE LEDS
 ///////////////////////////
-void danceLeds()
-{
+void danceLeds() {
   int delayTime = 50;
   int delayTime2 = 100;
 
   // CIRCLE
-  for(int i=0; i<4; i++)
-  {
+  for (int i = 0; i < 4; i++) {
     // UP
     pinMode(inputLED_a, INPUT);
     digitalWrite(inputLED_a, LOW);
@@ -627,16 +631,15 @@ void danceLeds()
     // LEFT
     pinMode(inputLED_a, OUTPUT);
     digitalWrite(inputLED_a, LOW);
-    pinMode(inputLED_b, OUTPUT);    
+    pinMode(inputLED_b, OUTPUT);
     digitalWrite(inputLED_b, HIGH);
     pinMode(inputLED_c, INPUT);
     digitalWrite(inputLED_c, LOW);
-    delay(delayTime);    
-  }    
+    delay(delayTime);
+  }
 
   // WIGGLE
-  for(int i=0; i<4; i++)
-  {
+  for (int i = 0; i < 4; i++) {
     // SPACE
     pinMode(inputLED_a, OUTPUT);
     digitalWrite(inputLED_a, HIGH);
@@ -644,7 +647,7 @@ void danceLeds()
     digitalWrite(inputLED_b, LOW);
     pinMode(inputLED_c, OUTPUT);
     digitalWrite(inputLED_c, LOW);
-    delay(delayTime2);    
+    delay(delayTime2);
 
     // CLICK
     pinMode(inputLED_a, OUTPUT);
@@ -653,60 +656,42 @@ void danceLeds()
     digitalWrite(inputLED_b, LOW);
     pinMode(inputLED_c, OUTPUT);
     digitalWrite(inputLED_c, HIGH);
-    delay(delayTime2);    
+    delay(delayTime2);
   }
 }
 
-void updateOutLEDs()
-{
+void updateOutLEDs() {
   boolean keyPressed = 0;
   boolean mousePressed = 0;
 
-  for (int i=0; i<NUM_INPUTS; i++)
-  {
-    if (inputs[i].pressed)
-    {
-      if (inputs[i].isKey)
-      {
+  for (int i = 0; i < NUM_INPUTS; i++) {
+    if (inputs[i].pressed) {
+      if (inputs[i].isKey) {
         keyPressed = 1;
 #ifdef DEBUG
         Serial.print("Key ");
         Serial.print(i);
         Serial.println(" pressed");
 #endif
-      }
-      else
-      {
+      } else {
         mousePressed = 1;
       }
     }
   }
 
-  if (keyPressed)
-  {
+  if (keyPressed) {
     digitalWrite(outputK, HIGH);
     TXLED1;
-  }
-  else
-  {
+  } else {
     digitalWrite(outputK, LOW);
     TXLED0;
   }
 
-  if (mousePressed)
-  {
+  if (mousePressed) {
     digitalWrite(outputM, HIGH);
     RXLED1;
-  }
-  else
-  {
+  } else {
     digitalWrite(outputM, LOW);
     RXLED0;
   }
 }
-
-
-
-
-
-

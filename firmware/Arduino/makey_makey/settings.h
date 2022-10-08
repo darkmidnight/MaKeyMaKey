@@ -11,7 +11,6 @@
     number, or symbol on your keyboard
   - you can also use codes for other keys such as modifier and function keys (see the
     the list of additional key codes at the bottom of this file)
-
 */
 
 int keyCodes[NUM_INPUTS] = {
@@ -78,14 +77,11 @@ int keyCodes[NUM_INPUTS] = {
 #define MOUSE_MAX_PIXELS              10   // Max pixels per step for mouse movement
 
 /*
-
 ///////////////////////////
 // ADDITIONAL KEY CODES ///
 ///////////////////////////
-
 - you can use these codes in the keyCodes array above
 - to get modifier keys, function keys, etc 
-
 KEY_LEFT_CTRL
 KEY_LEFT_SHIFT		
 KEY_LEFT_ALT		
@@ -94,7 +90,6 @@ KEY_RIGHT_CTRL
 KEY_RIGHT_SHIFT		
 KEY_RIGHT_ALT	
 KEY_RIGHT_GUI		
-
 KEY_BACKSPACE		
 KEY_TAB				
 KEY_RETURN			
@@ -119,5 +114,4 @@ KEY_F9
 KEY_F10
 KEY_F11				
 KEY_F12			
-
 */
