@@ -107,7 +107,7 @@ int loopCounter = 0;
 
 unsigned long inputTimers[NUM_INPUTS];
 int keyToggle[NUM_INPUTS];
-int releaseTimer = 500;
+int releaseTimer = 350;
 
 ///////////////////////////
 // FUNCTIONS //////////////
@@ -313,7 +313,7 @@ void updateInputStates() {
       if (inputs[i].bufferSum < releaseThreshold) {
         inputChanged = true;
         inputs[i].pressed = false;
-        if (i != 3 && inputs[i].isKey) { // 3 is RIGHT
+        if (i != 2 && i != 3 && inputs[i].isKey) {  // 2 is LEFT 3 is RIGHT
           Keyboard.release(inputs[i].keyCode);
         }
         if (inputs[i].isMouseMotion) {
@@ -327,9 +327,13 @@ void updateInputStates() {
         inputChanged = true;
         inputs[i].pressed = true;
         if (inputs[i].isKey) {
-          if (i==3) { // 3 is RIGHT
-          inputTimers[i] = millis();
+          if (i == 2 || i == 3) {  // 2 is LEFT 3 is RIGHT
+            inputTimers[i] = millis();
           } else {
+#ifdef DEBUGDMS
+            Serial.print("Pressing ");
+            Serial.println(i);
+#endif
             Keyboard.press(inputs[i].keyCode);
           }
         }
